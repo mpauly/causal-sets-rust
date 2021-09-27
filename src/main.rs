@@ -120,7 +120,7 @@ impl<'a> CausalSetConfiguration<'a> {
     }
 
     fn construct_relations(& self) {
-        // the following is O(N^2) and could maybe be faster by making use of the grid data structure
+        // the following is O(N^3) and could maybe be faster by making use of the grid data structure
         for node1 in self.nodes.iter() {
             for node2 in self.nodes.iter() {
                 if self.nodes_directly_related(node1, node2) {
@@ -220,7 +220,6 @@ impl<'a> CausalSetConfiguration<'a> {
 
     fn action_bd(&self, eps:f64) -> f64 {
         // see Eqn. (1) and (2) in 1706.06432
-        let mut action = 0.0;
         let f = |n: f64, eps:f64| -> f64 {
             let temp : f64 = 1.0-eps;
             temp.powf(n) * (1.0 - 2.0 * eps * n / temp + eps * eps * n * (n-1.0) / 2.0 /temp / temp) 
@@ -228,10 +227,7 @@ impl<'a> CausalSetConfiguration<'a> {
 
         let counts = self.path_count();
 
-        for n in 0..(self.grid_size - 2) {
-            action += (counts[n] as f64) * f(n as f64, eps);
-        }
-
+        let mut action = counts.iter().enumerate().map(|(n, n_n)| (*n_n as f64) * f(n as f64, eps)).sum();
         action = (self.grid_size_i as f64) - 2.0 * eps * action; 
         action *= 4.0 * eps;
         action
@@ -318,10 +314,12 @@ fn main() {
                 // we do not construct the correction relations here as we only need those to compute the action
                 causal_set.exchange_node_coordinate(node1, node2, coord);
             }
-            if step % 50 == 0 {
-                println!(" - sweep {} - step {}/{}", sweep, step, steps_per_sweep);
+            if step % 100 == 0 {
+                print!(".");
             }
         }
+        println!("finished");
+        causal_set.construct_relations();
         let path_count_string = causal_set.path_count().iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\t");
         match writeln!(output_file, "{}\t{}\t{}", sweep, causal_set.action_bd(epsilon), path_count_string) {
             Ok(_) => (),
