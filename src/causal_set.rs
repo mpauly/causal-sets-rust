@@ -214,12 +214,17 @@ impl<'a> Configuration<'a> {
 
     pub fn path_count(&self) -> Vec<i64> {
         let mut counts : Vec<i64> = Vec::new();
+        // we are iterating over all nodes twice but are not double-counting as we are only counting toward the future
         for node1 in self.nodes.iter() {
             for node2 in self.nodes.iter() {
                 counts.extend(node1.find_in_future(node2, 0));
             }
         }
-        counts.iter().fold(vec![0;self.grid_size], |mut v, x| {v[*x as usize]+= 1; v})
+        // find_in_future counts intermediate edges, need to switch to intermediate nodes
+        counts.iter()
+            .filter(|&x| *x > 0) // get rid of the number of nodes
+            .map(|x| x-1) // switch to number of intermediate nodes 
+            .fold(vec![0;self.grid_size - 1], |mut v, x| {v[x as usize]+= 1; v}) // count which number occurs how often
     }
 
     pub fn action_bd(&self, eps:f64) -> f64 {

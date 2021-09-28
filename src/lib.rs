@@ -71,7 +71,9 @@ pub fn run_simulation(config: Config) {
     // following Surya 2012
     let steps_per_sweep = config.grid_size * (config.grid_size - 1) / 2;
 
-    match writeln!(output_file, "sweep\taction\tnr_edges") {
+    let n_string:Vec<String> = (0..=config.grid_size - 2).map(|x| format!("N{}", x)).collect();
+    let n_string = n_string.join("\t");
+    match writeln!(output_file, "sweep\taction\t{}", n_string) {
         Ok(_) => (),
         Err(e) => panic!("Error writing to output file: {}", e)
     };
