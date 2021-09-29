@@ -101,6 +101,10 @@ impl<'a> Configuration<'a> {
         config
     }
 
+    pub fn text_representation(&self) -> String {
+        self.nodes.iter().map(|&n| format!("{},{},{}", n.id, n.u.get(), n.v.get())).collect::<Vec<String>>().join("\n") 
+    }
+
     fn nodes_directly_related(&self, first_node: &'a Node<'a>, second_node: &'a Node<'a>)-> bool {
         if first_node == second_node {return false}
         if !first_node.related(second_node) {return false}
