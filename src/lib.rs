@@ -79,8 +79,10 @@ pub fn run_simulation(config: Config) {
     };
     
     for sweep in 0..config.nr_of_sweeps {
+        let mut rejected = 0;
+        let mut accepted = 0;
         println!(" Starting sweep {} of {}", sweep, config.nr_of_sweeps);
-        for step in 0..steps_per_sweep {
+        for _step in 0..steps_per_sweep {
             let coord: NodeCoordinate = rand::random();
             let (node1, node2) = causal_set.random_nodes2();
             // here we already alter the set
@@ -92,15 +94,19 @@ pub fn run_simulation(config: Config) {
                 // reject the move and undo it
                 // we do not construct the correction relations here as we only need those to compute the action
                 causal_set.exchange_node_coordinate(node1, node2, coord);
-            }
-            if step % 100 == 0 {
-                print!(".");
+                rejected += 1;
+            } else {
+                accepted += 1
             }
         }
-        println!("finished");
+
         causal_set.construct_relations();
         let path_count_string = causal_set.path_count().iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\t");
-        match writeln!(output_file, "{}\t{}\t{}", sweep, causal_set.action_bd(config.epsilon), path_count_string) {
+        let action_value = causal_set.action_bd(config.epsilon);
+        println!("  finished - (accepted, rejected, action) = ({},{},{})", accepted, rejected, action_value);
+        // println!("  {}", path_count_string);
+        // causal_set.print_set();
+        match writeln!(output_file, "{}\t{}\t{}", sweep,action_value, path_count_string) {
             Ok(_) => (),
             Err(e) => panic!("Error writing to output file: {}", e)
         };
