@@ -17,6 +17,7 @@ pub struct Config {
     beta: f64,
     nr_of_sweeps: i64,
     output_path: std::path::PathBuf,
+    final_config_path: std::path::PathBuf,
 }
 
 impl Config {
@@ -31,13 +32,26 @@ impl Config {
         let parameter_files = YamlLoader::load_from_str(&parameter_file_string).unwrap();
         let parameters = &parameter_files[0];
     
-        let output_path = file_name.with_file_name("output.dat");
+        let output_path = match parameters["output_file"].as_str() {
+            Some(val) => file_name.with_file_name(val), 
+            None => file_name.with_file_name("output.dat")
+        };
+        let final_config = match parameters["final_config_file"].as_str() {
+            Some(val) => file_name.with_file_name(val), 
+            None => file_name.with_file_name("final_config.dat")
+        };
+        let nr_of_sweeps = match parameters["nr_of_sweeps"].as_i64() {
+            Some(val)=> val,
+            None => 5000
+        };
+
         Config{
             grid_size: parameters["nr_of_points"].as_i64().unwrap(),
             epsilon: parameters["epsilon"].as_f64().unwrap(),
             beta: parameters["beta"].as_f64().unwrap(),
-            nr_of_sweeps: 5000,
+            nr_of_sweeps: nr_of_sweeps,
             output_path: output_path,
+            final_config_path: final_config,
         }
     }
 }
@@ -111,7 +125,23 @@ pub fn run_simulation(config: Config) {
             Err(e) => panic!("Error writing to output file: {}", e)
         };
     }
+    write_configuration_to_file(&causal_set, &config.final_config_path);
     causal_set.print_set();
     causal_set.print_nodelist();
 
+}
+
+fn write_configuration_to_file(config: &Configuration, output_path: &std::path::Path) {
+    let mut output_file = match File::create(output_path) {
+        Ok(f)=> f,
+        Err(e) => panic!("Error creating configuration output file: {}", e)
+    };
+    match writeln!(output_file, "id,u,v") {
+        Ok(_) => (),
+        Err(e) => panic!("Error writing to configuration output file: {}", e)
+    };
+    match writeln!(output_file, "{}", config.text_representation()) {
+        Ok(_) => (),
+        Err(e) => panic!("Error writing to configuration output file: {}", e)
+    };
 }
