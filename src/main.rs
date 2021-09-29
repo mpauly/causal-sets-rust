@@ -2,9 +2,8 @@ use std::env;
 use std::path::Path;
 use std::process;
 
-use causal_sets::Config;
 use causal_sets::run_simulation;
-
+use causal_sets::Config;
 
 fn main() {
     let args: Vec<_> = env::args().collect();
@@ -14,7 +13,7 @@ fn main() {
     }
     let working_dir = &args[1];
     let working_dir = Path::new(working_dir);
-    
+
     let config = Config::new_from_file(&working_dir.join("parameters.yml"));
     println!("Working dir: {}", working_dir.display());
     run_simulation(config);
