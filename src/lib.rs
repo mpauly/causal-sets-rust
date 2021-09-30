@@ -85,7 +85,6 @@ pub fn run_simulation(config: Config) {
     // make causal set
     let causal_set = Configuration::new(&mut nodes, config.grid_size);
     causal_set.position_nodes();
-    causal_set.construct_relations();
     let mut rng = rand::thread_rng();
 
     // following Surya 2012
@@ -100,6 +99,7 @@ pub fn run_simulation(config: Config) {
         Err(e) => panic!("Error writing to output file: {}", e),
     };
 
+    let mut old_action = causal_set.action_bd(config.epsilon);
     for sweep in 0..config.nr_of_sweeps {
         let mut rejected = 0;
         let mut accepted = 0;
@@ -109,22 +109,26 @@ pub fn run_simulation(config: Config) {
             let (node1, node2) = causal_set.random_nodes2();
             // here we already alter the set
             causal_set.exchange_node_coordinate(node1, node2, coord);
-            causal_set.construct_relations();
-            let exponent = -config.beta * causal_set.action_bd(config.epsilon);
-            let random_nr: f64 = rng.sample(Standard);
-            if exponent < random_nr.ln() {
-                // reject the move and undo it
-                // we do not construct the correction relations here as we only need those to compute the action
-                causal_set.exchange_node_coordinate(node1, node2, coord);
-                rejected += 1;
+            let new_action = causal_set.action_bd(config.epsilon);
+            let delta_action = new_action - old_action;
+            old_action = new_action;
+            // if delta_action is negative accept, otherwise sample
+            if delta_action > 0.0 {
+                let exponent = -config.beta * delta_action;
+                let random_nr: f64 = rng.sample(Standard);
+                if exponent.exp() < random_nr {
+                    // reject the move and undo it
+                    // we do not construct the relations here as we only need those to compute the action
+                    causal_set.exchange_node_coordinate(node1, node2, coord);
+                    rejected += 1;
+                }
             } else {
                 accepted += 1
             }
         }
 
-        causal_set.construct_relations();
         let path_count_string = causal_set
-            .path_count()
+            .interval_count()
             .iter()
             .map(|x| x.to_string())
             .collect::<Vec<String>>()

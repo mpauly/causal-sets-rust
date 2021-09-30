@@ -22,78 +22,43 @@ impl Distribution<NodeCoordinate> for Standard {
 }
 
 #[derive(Debug)]
-pub struct Node<'a> {
+pub struct Node {
     id: usize,
     u: Cell<i64>,
     v: Cell<i64>,
-    parents: RefCell<Vec<&'a Node<'a>>>,
-    children: RefCell<Vec<&'a Node<'a>>>,
 }
 
-impl<'a> PartialEq for Node<'a> {
+impl<'a> PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<'a> Node<'a> {
-    pub fn new(id: usize, u: i64, v: i64) -> Node<'a> {
+impl Node {
+    pub fn new(id: usize, u: i64, v: i64) -> Node {
         Node {
             id: id,
             u: Cell::new(u),
             v: Cell::new(v),
-            parents: RefCell::new(Vec::new()),
-            children: RefCell::new(Vec::new()),
         }
     }
 
-    fn t(&self) -> i64 {
-        self.u.get() + self.v.get()
+    fn before(&self, second: &Node) -> bool {
+        self.u > second.u && self.v > second.v
     }
-    fn x(&self) -> i64 {
-        self.u.get() - self.v.get()
+    #[allow(dead_code)]
+    fn after(&self, second: &Node) -> bool {
+        self.u < second.u && self.v < second.v
     }
-    fn before(&self, second: &Node<'a>) -> bool {
-        self.t() < second.t()
-    }
-    fn after(&self, second: &Node<'a>) -> bool {
-        self.t() > second.t()
-    }
-    fn related(&self, second: &Node<'a>) -> bool {
-        let del_x = self.x() - second.x();
-        let del_t = self.t() - second.t();
-        if del_x * del_x > del_t * del_t {
-            return false;
-        }
-        true
-    }
-
-    fn add_child(&self, node: &'a Node<'a>) {
-        self.children.borrow_mut().push(node);
-    }
-
-    fn add_parent(&self, node: &'a Node<'a>) {
-        self.parents.borrow_mut().push(node);
-    }
-
-    fn find_in_future(&self, node: &'a Node<'a>, count: i64) -> Vec<i64> {
-        if self == node {
-            return vec![count];
-        }
-        return self
-            .children
-            .borrow()
-            .iter()
-            .map(|c| c.find_in_future(node, count + 1))
-            .flatten()
-            .collect();
+    fn related(&self, second: &Node) -> bool {
+        (self.u > second.u && self.v > second.v) || (self.u < second.u && self.v < second.v)
     }
 }
 
 #[derive(Debug)]
 pub struct Configuration<'a> {
-    nodes: &'a mut Vec<&'a Node<'a>>,
-    data: RefCell<Array2<Option<&'a Node<'a>>>>,
+    nodes: &'a mut Vec<&'a Node>,
+    data: RefCell<Array2<Option<&'a Node>>>,
     grid_size: usize,
     grid_size_i: i64,
     seed: u64,
@@ -101,7 +66,7 @@ pub struct Configuration<'a> {
 }
 
 impl<'a> Configuration<'a> {
-    pub fn new(nodes: &'a mut Vec<&'a Node<'a>>, grid_size: i64) -> Configuration<'a> {
+    pub fn new(nodes: &'a mut Vec<&'a Node>, grid_size: i64) -> Configuration<'a> {
         let config = Configuration {
             grid_size: grid_size as usize,
             grid_size_i: grid_size,
@@ -124,44 +89,10 @@ impl<'a> Configuration<'a> {
             .join("\n")
     }
 
-    fn nodes_directly_related(&self, first_node: &'a Node<'a>, second_node: &'a Node<'a>) -> bool {
-        if first_node == second_node {
-            return false;
-        }
-        if !first_node.related(second_node) {
-            return false;
-        }
-        for node3 in self.nodes.iter() {
-            if first_node.related(node3) && second_node.related(node3) {
-                if first_node.before(node3) && second_node.after(node3) {
-                    return false;
-                } else if first_node.after(node3) && second_node.before(node3) {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-
     pub fn position_nodes(&self) {
         for node1 in self.nodes.iter() {
             let mut data = self.data.borrow_mut();
             data[[node1.u.get() as usize, node1.v.get() as usize]] = Some(node1);
-        }
-    }
-
-    pub fn construct_relations(&self) {
-        // the following is O(N^3) and could maybe be faster by making use of the grid data structure
-        for node1 in self.nodes.iter() {
-            for node2 in self.nodes.iter() {
-                if self.nodes_directly_related(node1, node2) {
-                    if node1.before(&node2) {
-                        node1.add_child(&node2);
-                    } else {
-                        node1.add_parent(&node2);
-                    }
-                }
-            }
         }
     }
 
@@ -211,24 +142,10 @@ impl<'a> Configuration<'a> {
                 node.u.get(),
                 node.v.get()
             );
-            let parents: Vec<_> = node
-                .parents
-                .borrow()
-                .iter()
-                .map(|n| n.id.to_string())
-                .collect();
-            println!("  - Parents: {}", parents.join(","));
-            let children: Vec<_> = node
-                .children
-                .borrow()
-                .iter()
-                .map(|n| n.id.to_string())
-                .collect();
-            println!("  - Children: {}", children.join(","));
         }
     }
 
-    pub fn random_nodes2(&self) -> (&'a Node<'a>, &'a Node<'a>) {
+    pub fn random_nodes2(&self) -> (&'a Node, &'a Node) {
         let sample: Vec<_> = self
             .nodes
             .choose_multiple(&mut rand::thread_rng(), 2)
@@ -238,8 +155,8 @@ impl<'a> Configuration<'a> {
 
     pub fn exchange_node_coordinate(
         &self,
-        first_node: &'a Node<'a>,
-        second_node: &'a Node<'a>,
+        first_node: &'a Node,
+        second_node: &'a Node,
         coordinate: NodeCoordinate,
     ) {
         let mut data = self.data.borrow_mut();
@@ -259,33 +176,44 @@ impl<'a> Configuration<'a> {
         }
         data[[first_node.u.get() as usize, first_node.v.get() as usize]] = Some(first_node);
         data[[second_node.u.get() as usize, second_node.v.get() as usize]] = Some(second_node);
-        self.clear_children_and_parent_info();
     }
 
-    fn clear_children_and_parent_info(&self) {
-        for node in self.nodes.iter() {
-            node.children.borrow_mut().clear();
-            node.parents.borrow_mut().clear();
+    pub fn interval_cardinality(&self, first_node: &Node, second_node: &Node) -> i64 {
+        if !first_node.related(second_node) {
+            panic!("Only pass related nodes");
         }
-    }
-
-    pub fn path_count(&self) -> Vec<i64> {
-        let mut counts: Vec<i64> = Vec::new();
-        // we are iterating over all nodes twice but are not double-counting as we are only counting toward the future
-        for node1 in self.nodes.iter() {
-            for node2 in self.nodes.iter() {
-                counts.extend(node1.find_in_future(node2, 0));
+        let mut nodes = 0;
+        let u_min = std::cmp::min(first_node.u.get(), second_node.u.get());
+        let u_max = std::cmp::max(first_node.u.get(), second_node.u.get());
+        let v_min = std::cmp::min(first_node.v.get(), second_node.v.get());
+        let v_max = std::cmp::max(first_node.v.get(), second_node.v.get());
+        let data = self.data.borrow();
+        for u in u_min..=u_max {
+            for v in v_min..=v_max {
+                match data[[u as usize, v as usize]] {
+                    Some(_) => nodes += 1,
+                    None => (),
+                }
             }
         }
-        // find_in_future counts intermediate edges, need to switch to intermediate nodes
-        counts
-            .iter()
-            .filter(|&x| *x > 0) // get rid of the number of nodes
-            .map(|x| x - 1) // switch to number of intermediate nodes
-            .fold(vec![0; self.grid_size - 1], |mut v, x| {
-                v[x as usize] += 1;
-                v
-            }) // count which number occurs how often
+        // don't count the nodes themselves
+        nodes - 2
+    }
+
+    pub fn interval_count(&self) -> Vec<i64> {
+        let mut counts: Vec<i64> = Vec::new();
+        // we are iterating over all nodes twice but are not double-counting as we are only counting towards the future
+        for node1 in self.nodes.iter() {
+            for node2 in self.nodes.iter() {
+                if node1.before(node2) {
+                    counts.push(self.interval_cardinality(node1, node2));
+                }
+            }
+        }
+        counts.iter().fold(vec![0; self.grid_size - 1], |mut v, x| {
+            v[*x as usize] += 1;
+            v
+        })
     }
 
     pub fn action_bd(&self, eps: f64) -> f64 {
@@ -296,7 +224,7 @@ impl<'a> Configuration<'a> {
                 * (1.0 - 2.0 * eps * n / temp + eps * eps * n * (n - 1.0) / 2.0 / temp / temp)
         };
 
-        let counts = self.path_count();
+        let counts = self.interval_count();
 
         let mut action = counts
             .iter()
