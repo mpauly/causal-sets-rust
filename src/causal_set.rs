@@ -96,6 +96,7 @@ impl<'a> Configuration<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_set(&self) {
         let data = self.data.borrow();
         let nr_of_slices = 2 * self.grid_size - 1;
