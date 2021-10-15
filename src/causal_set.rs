@@ -134,6 +134,7 @@ impl<'a> Configuration<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_nodelist(&self) {
         for node in self.nodes.iter() {
             println!(
@@ -210,6 +211,7 @@ impl<'a> Configuration<'a> {
                 }
             }
         }
+        // grid_size - 1 is correct here: the vector goes from 0 to N-2
         counts.iter().fold(vec![0; self.grid_size - 1], |mut v, x| {
             v[*x as usize] += 1;
             v

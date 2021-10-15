@@ -103,7 +103,7 @@ pub fn run_simulation(config: Config) {
     for sweep in 0..config.nr_of_sweeps {
         let mut rejected = 0;
         let mut accepted = 0;
-        println!(" Starting sweep {} of {}", sweep, config.nr_of_sweeps);
+        println!(" Starting sweep {} of {}", sweep + 1, config.nr_of_sweeps);
         for _step in 0..steps_per_sweep {
             let coord: NodeCoordinate = rand::random();
             let (node1, node2) = causal_set.random_nodes2();
@@ -111,20 +111,23 @@ pub fn run_simulation(config: Config) {
             causal_set.exchange_node_coordinate(node1, node2, coord);
             let new_action = causal_set.action_bd(config.epsilon);
             let delta_action = new_action - old_action;
-            old_action = new_action;
             // if delta_action is negative accept, otherwise sample
             if delta_action > 0.0 {
                 let exponent = -config.beta * delta_action;
                 let random_nr: f64 = rng.sample(Standard);
                 if exponent.exp() < random_nr {
                     // reject the move and undo it
-                    // we do not construct the relations here as we only need those to compute the action
                     causal_set.exchange_node_coordinate(node1, node2, coord);
                     rejected += 1;
+                } else {
+                    accepted += 1;
+                    old_action = new_action;
                 }
             } else {
-                accepted += 1
+                accepted += 1;
+                old_action = new_action;
             }
+            //causal_set.print_set();
         }
 
         let path_count_string = causal_set
@@ -151,7 +154,6 @@ pub fn run_simulation(config: Config) {
     }
     write_configuration_to_file(&causal_set, &config.final_config_path);
     causal_set.print_set();
-    causal_set.print_nodelist();
 }
 
 fn write_configuration_to_file(config: &Configuration, output_path: &std::path::Path) {
