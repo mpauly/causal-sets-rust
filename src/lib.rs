@@ -1,6 +1,8 @@
 use rand::prelude::*;
+use rayon::prelude::*;
 use rand::{distributions::Standard, Rng};
 use std::fs::File;
+use std::sync::{Arc, Mutex};
 use std::io::prelude::*;
 use typed_arena::Arena;
 use yaml_rust::YamlLoader;
@@ -16,6 +18,15 @@ pub struct Config {
     nr_of_sweeps: i64,
     output_path: std::path::PathBuf,
     final_config_path: std::path::PathBuf,
+}
+
+pub struct RunConfig {
+    grid_size: i64,
+    epsilon: f64,
+    beta: f64,
+    verbose: bool,
+    nr_of_sweeps: i64,
+    output_file: Arc<Mutex<File>>,
 }
 
 impl Config {
@@ -77,102 +88,122 @@ impl Config {
 }
 
 pub fn run_simulation(config: Config) {
-    let mut output_file = match File::create(config.output_path) {
-        Ok(f) => f,
-        Err(e) => panic!("Error creating output file: {}", e),
-    };
-
-    // following Surya 2012
-    let steps_per_sweep = config.grid_size * (config.grid_size - 1) / 2;
+    let output_file = Arc::new(Mutex::new(File::create(config.output_path).unwrap()));
 
     let n_string: Vec<String> = (0..=config.grid_size - 2)
         .map(|x| format!("N{}", x))
         .collect();
     let n_string = n_string.join("\t");
-    match writeln!(output_file, "beta\tepsilon\tsweep\taction\t{}", n_string) {
-        Ok(_) => (),
-        Err(e) => panic!("Error writing to output file: {}", e),
-    };
+    {
+        let mut output_file = output_file.lock().unwrap();
+        match writeln!(output_file, "beta\tepsilon\tsweep\taction\t{}", n_string) {
+            Ok(_) => (),
+            Err(e) => panic!("Error writing to output file: {}", e),
+        };
+    }
 
-    for (beta, epsilon) in itertools::iproduct!(config.beta, config.epsilon) {
-        println!(
-            "Starting run with N={} at eps={}, beta={}",
-            config.grid_size, epsilon, beta
-        );
-        // setup nodes
-        // we are using an arena here so that all nodes have the same lifetime and can reference each other
-        let node_arena = Arena::new();
-        let mut nodes: Vec<&Node> = Vec::new();
-        let mut rng = rand::thread_rng();
-        let u_values: Vec<i64> = (0..config.grid_size).collect();
-        let mut v_values: Vec<i64> = (0..config.grid_size).collect();
-        v_values.shuffle(&mut rng);
-        for (i, (u, v)) in u_values.iter().zip(v_values.iter()).enumerate() {
-            let node = node_arena.alloc(Node::new(i, *u, *v));
-            nodes.push(node);
+    let verbosity = config.verbose;
+    let grid_size = config.grid_size;
+    let nr_of_sweeps = config.nr_of_sweeps;
+
+    let runconfs: Vec<RunConfig> = itertools::iproduct!(config.beta.iter(), config.epsilon.iter()).map(|(beta, epsilon)| RunConfig {
+        epsilon: *epsilon,
+        beta: *beta,
+        verbose: verbosity,
+        grid_size: grid_size,
+        nr_of_sweeps: nr_of_sweeps,
+        output_file: Arc::clone(&output_file),
+    }).collect();
+
+    let results : Result<Vec<(i64, i64)>, _> = runconfs.par_iter().map(run_simulation_for_params).collect();
+}
+
+
+fn run_simulation_for_params(config: &RunConfig) -> Result<(i64, i64), &str> {
+    println!(
+        "Starting run with N={} at eps={}, beta={}",
+        config.grid_size, config.epsilon, config.beta
+    );
+
+    // following Surya 2012
+    let steps_per_sweep = config.grid_size * (config.grid_size - 1) / 2;
+    // setup nodes
+    // we are using an arena here so that all nodes have the same lifetime and can reference each other
+    let node_arena = Arena::new();
+    let mut nodes: Vec<&Node> = Vec::new();
+    let mut rng = rand::thread_rng();
+    let u_values: Vec<i64> = (0..config.grid_size).collect();
+    let mut v_values: Vec<i64> = (0..config.grid_size).collect();
+    v_values.shuffle(&mut rng);
+    for (i, (u, v)) in u_values.iter().zip(v_values.iter()).enumerate() {
+        let node = node_arena.alloc(Node::new(i, *u, *v));
+        nodes.push(node);
+    }
+
+    // make causal set
+    let causal_set = Configuration::new(&mut nodes, config.grid_size);
+    causal_set.position_nodes();
+    let mut rng = rand::thread_rng();
+
+    let mut old_action = causal_set.action_bd(config.epsilon);
+    let mut rejected = 0;
+    let mut accepted = 0;
+    for sweep in 0..config.nr_of_sweeps {
+        if config.verbose {
+            println!(" Starting sweep {} of {}", sweep + 1, config.nr_of_sweeps);
         }
-
-        // make causal set
-        let causal_set = Configuration::new(&mut nodes, config.grid_size);
-        causal_set.position_nodes();
-        let mut rng = rand::thread_rng();
-
-        let mut old_action = causal_set.action_bd(epsilon);
-        for sweep in 0..config.nr_of_sweeps {
-            let mut rejected = 0;
-            let mut accepted = 0;
-            if config.verbose {
-                println!(" Starting sweep {} of {}", sweep + 1, config.nr_of_sweeps);
-            }
-            for _step in 0..steps_per_sweep {
-                let coord: NodeCoordinate = rand::random();
-                let (node1, node2) = causal_set.random_nodes2();
-                // here we already alter the set
-                causal_set.exchange_node_coordinate(node1, node2, coord);
-                let new_action = causal_set.action_bd(epsilon);
-                let delta_action = new_action - old_action;
-                // if delta_action is negative accept, otherwise sample
-                if delta_action > 0.0 {
-                    let exponent = -beta * delta_action;
-                    let random_nr: f64 = rng.sample(Standard);
-                    if exponent.exp() < random_nr {
-                        // reject the move and undo it
-                        causal_set.exchange_node_coordinate(node1, node2, coord);
-                        rejected += 1;
-                    } else {
-                        accepted += 1;
-                        old_action = new_action;
-                    }
+        for _step in 0..steps_per_sweep {
+            let coord: NodeCoordinate = rand::random();
+            let (node1, node2) = causal_set.random_nodes2();
+            // here we already alter the set
+            causal_set.exchange_node_coordinate(node1, node2, coord);
+            let new_action = causal_set.action_bd(config.epsilon);
+            let delta_action = new_action - old_action;
+            // if delta_action is negative accept, otherwise sample
+            if delta_action > 0.0 {
+                let exponent = -config.beta * delta_action;
+                let random_nr: f64 = rng.sample(Standard);
+                if exponent.exp() < random_nr {
+                    // reject the move and undo it
+                    causal_set.exchange_node_coordinate(node1, node2, coord);
+                    rejected += 1;
                 } else {
                     accepted += 1;
                     old_action = new_action;
                 }
-                //causal_set.print_set();
+            } else {
+                accepted += 1;
+                old_action = new_action;
             }
+            //causal_set.print_set();
+        }
 
-            let path_count_string = causal_set
-                .interval_count()
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join("\t");
-            let action_value = causal_set.action_bd(epsilon);
-            if config.verbose {
-                println!(
-                    "  finished - (accepted, rejected, action) = ({},{},{})",
-                    accepted, rejected, action_value
-                );
-            }
-            // println!("  {}", path_count_string);
-            // causal_set.print_set();
+        let path_count_string = causal_set
+            .interval_count()
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join("\t");
+        let action_value = causal_set.action_bd(config.epsilon);
+        if config.verbose {
+            println!(
+                "  finished - (accepted, rejected, action) = ({},{},{})",
+                accepted, rejected, action_value
+            );
+        }
+        // println!("  {}", path_count_string);
+        // causal_set.print_set();
+        {
+            let mut output_file = config.output_file.lock().unwrap();
             match writeln!(
                 output_file,
                 "{}\t{}\t{}\t{}\t{}",
-                beta, epsilon, sweep, action_value, path_count_string
+                config.beta, config.epsilon, sweep, action_value, path_count_string
             ) {
                 Ok(_) => (),
                 Err(e) => panic!("Error writing to output file: {}", e),
             };
         }
     }
+    Ok((accepted, rejected))
 }
