@@ -81,6 +81,7 @@ impl<'a> Configuration<'a> {
         config
     }
 
+    #[allow(dead_code)]
     pub fn text_representation(&self) -> String {
         self.nodes
             .iter()

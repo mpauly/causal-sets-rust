@@ -17,7 +17,7 @@ pub struct Config {
     verbose: bool,
     nr_of_sweeps: i64,
     output_path: std::path::PathBuf,
-    final_config_path: std::path::PathBuf,
+    // final_config_path: std::path::PathBuf,
 }
 
 pub struct RunConfig {
@@ -51,10 +51,10 @@ impl Config {
             Some(val) => file_name.with_file_name(val),
             None => file_name.with_file_name("output.dat"),
         };
-        let final_config = match parameters["final_config_file"].as_str() {
-            Some(val) => file_name.with_file_name(val),
-            None => file_name.with_file_name("final_config.dat"),
-        };
+        //let final_config = match parameters["final_config_file"].as_str() {
+        //    Some(val) => file_name.with_file_name(val),
+        //    None => file_name.with_file_name("final_config.dat"),
+        //};
         let verbosity = match parameters["verbose"].as_bool() {
             Some(val) => val,
             None => false,
@@ -82,7 +82,7 @@ impl Config {
             verbose: verbosity,
             nr_of_sweeps: nr_of_sweeps,
             output_path: output_path,
-            final_config_path: final_config,
+            // final_config_path: final_config,
         }
     }
 }
@@ -115,7 +115,7 @@ pub fn run_simulation(config: Config) {
         output_file: Arc::clone(&output_file),
     }).collect();
 
-    let results : Result<Vec<(i64, i64)>, _> = runconfs.par_iter().map(run_simulation_for_params).collect();
+    let _results : Result<Vec<(i64, i64)>, _> = runconfs.par_iter().map(run_simulation_for_params).collect();
 }
 
 
