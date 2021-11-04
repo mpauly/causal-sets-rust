@@ -11,4 +11,5 @@ Clone this repository and run `cargo build --release`. Notice that the speed dif
 
 Compiling produces a binary `causal_sets`. Run this binary with a data directory, e.g. `causal_sets data/some_run`. The code expects to find a file `parameters.yml` in this directory. For an example see `resources/parameters.yml`.
 The current version of the phase diagram computed from this file can be seen below.
+
 ![Phase Diagram](/resources/phase_diagram.png)
