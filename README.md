@@ -1,7 +1,7 @@
 # Causal Set MCMC
 
-This code performs MCMC simulations with $d=2$ causal sets, with the aim of reproducing the results of [https://arxiv.org/abs/1110.6244](1110.6244).
-The code is not yet doing what it should, so use at your own risk.
+This code performs MCMC simulations with $d=2$ causal sets representing Minkowski space, with the aim of reproducing the results of [https://arxiv.org/abs/1110.6244](1110.6244).
+The code is not thoroughly tested, so use at your own risk.
 
 ## Installation
 
@@ -9,4 +9,6 @@ Clone this repository and run `cargo build --release`. Notice that the speed dif
 
 ## Usage
 
-Compiling produces a binary `causal_sets`. Run this binary with a data directory, e.g. `causal_sets data/some_run`. The code expects to find a file `parameters.yml` in this directory.
+Compiling produces a binary `causal_sets`. Run this binary with a data directory, e.g. `causal_sets data/some_run`. The code expects to find a file `parameters.yml` in this directory. For an example see `resources/parameters.yml`.
+The current version of the phase diagram computed from this file can be seen below.
+![Phase Diagram](/resources/phase_diagram.png)
